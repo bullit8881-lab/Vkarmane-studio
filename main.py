@@ -2,27 +2,33 @@ import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Берём токен из переменных окружения Railway
 TOKEN = os.getenv("BOT_TOKEN")
 
-def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    update.message.reply_text("✅ Бот запущен и работает!")
 
-def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    update.message.reply_text("Напиши /start")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🤖 Бот запущен и работает!")
+
+
+async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🏓 Pong!")
+
 
 def main():
     if not TOKEN:
         raise RuntimeError("❌ BOT_TOKEN не найден в переменных окружения")
 
-    application = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(TOKEN).build()
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("ping", ping))
 
-    print("🤖 Bot started")
+    print("✅ Bot started")
 
-    application.run_polling()
+    app.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES,
+    )
+
 
 if __name__ == "__main__":
     main()
