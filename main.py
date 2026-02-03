@@ -15,39 +15,59 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Напиши тему после /song, например /song про усталость после завода")
+        await update.message.reply_text("Напиши тему после /song, например /song про кузнечиков в стиле рэп")
         return
 
     theme = ' '.join(context.args)
-    await update.message.reply_text(f"Генерю текст на тему '{theme}'... Подожди 10 сек...")
+    await update.message.reply_text(f"Генерю текст на тему '{theme}'... Подожди 10–20 сек...")
 
-    if not GIGACHAT_TOKEN:
-        await update.message.reply_text("Токен GigaChat не добавлен в Railway 😅 Добавь его в Variables")
+    auth_key = os.getenv("GIGACHAT_TOKEN")  # это твой старый ключ из Variables
+    if not auth_key:
+        await update.message.reply_text("GIGACHAT_TOKEN не добавлен в Railway 😅")
         return
 
-    headers = {
-        "Authorization": f"Bearer {GIGACHAT_TOKEN}",
-        "Content-Type": "application/json"
+    # Шаг 1: Получаем свежий Access Token
+    oauth_url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    oauth_headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "RqUID": "your-unique-id",  # можно любое, например "test"
+        "Authorization": f"Basic {auth_key}"  # Basic + твой ключ
     }
-    payload = {
-        "model": "GigaChat:latest",
-        "messages": [
-            {"role": "system", "content": "Ты крутой русский автор песен. Пиши матерно, если тема требует, рифмуй жёстко, делай 2 куплета + припев."},
-            {"role": "user", "content": f"Напиши текст песни на тему: {theme}. Сделай куплеты, припев. Потом дай промпт для музыки в @gusli_aibot."}
-        ],
-        "temperature": 0.9
-    }
+    oauth_data = "scope=GIGACHAT_API_PERS"
 
     try:
-        response = requests.post("https://gigachat.devices.sberbank.ru/api/v1/chat/completions", json=payload, headers=headers, timeout=30, verify=False)
+        oauth_response = requests.post(oauth_url, headers=oauth_headers, data=oauth_data, verify=False, timeout=10)
+        if oauth_response.status_code != 200:
+            await update.message.reply_text(f"Ошибка получения токена: {oauth_response.status_code} - {oauth_response.text}")
+            return
+
+        access_token = oauth_response.json()["access_token"]
+        await update.message.reply_text("Токен получен! Генерю текст...")
+
+        # Шаг 2: Теперь генерируем текст с новым токеном
+        chat_url = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+        chat_headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "RqUID": "test"
+        }
+        payload = {
+            "model": "GigaChat:latest",
+            "messages": [
+                {"role": "system", "content": "Ты крутой русский автор песен. Пиши матерно, если тема требует, рифмуй жёстко, делай 2 куплета + припев."},
+                {"role": "user", "content": f"Напиши текст песни на тему: {theme}. Сделай куплеты, припев. Потом дай промпт для музыки в @gusli_aibot."}
+            ],
+            "temperature": 0.9
+        }
+
+        response = requests.post(chat_url, json=payload, headers=chat_headers, verify=False, timeout=30)
         if response.status_code == 200:
             text = response.json()["choices"][0]["message"]["content"]
-            await update.message.reply_text(f"Вот текст песни:\n\n{text}\n\nТеперь вставь промпт в @gusli_aibot или @easysongbot и получи трек!")
+            await update.message.reply_text(f"Вот текст песни:\n\n{text}\n\nКидай промпт в @gusli_aibot или @easysongbot!")
         else:
-            await update.message.reply_text(f"Ошибка: {response.status_code} - {response.text}")
+            await update.message.reply_text(f"Ошибка генерации: {response.status_code} - {response.text}")
     except Exception as e:
         await update.message.reply_text(f"Что-то сломалось: {str(e)}")
-
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Эхо: {update.message.text}")
 
