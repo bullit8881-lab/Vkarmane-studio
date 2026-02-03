@@ -4,29 +4,42 @@ import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
+# Логи для отладки
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Токены из Railway Variables
 TOKEN = os.getenv("BOT_TOKEN")
 GIGACHAT_TOKEN = os.getenv("GIGACHAT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Дарова! Я теперь умный! Напиши /song и тему песни, например:\n/song про кузнечиков в стиле рэп")
+    await update.message.reply_text(
+        "Дарова! Я умный Сонграйтер 🔥\n"
+        "Напиши /song и тему песни, например:\n"
+        "/song про кузнечиков в стиле шансон\n"
+        "Или просто текст — отвечу эхом"
+    )
 
-# Шаг 1: Получаем свежий Access Token по примеру с сайта Сбера
-    oauth_url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
-    auth_key = os.getenv("GIGACHAT_TOKEN")
-    if not auth_key:
-        await update.message.reply_text("GIGACHAT_TOKEN не добавлен в Railway 😅")
+async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Напиши тему после /song, например:\n/song про усталость после завода в стиле русский рок")
         return
 
+    theme = ' '.join(context.args)
+    await update.message.reply_text(f"Генерю текст песни на тему '{theme}'... Подожди 10–20 сек...")
+
+    if not GIGACHAT_TOKEN:
+        await update.message.reply_text("GIGACHAT_TOKEN не добавлен в Variables Railway 😅 Добавь его!")
+        return
+
+    # Шаг 1: Получаем Access Token (по примеру Сбера)
+    oauth_url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     oauth_headers = {
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
-        "RqUID": "test-rq-12345",  # любое уникальное, можно менять на рандом
-        "Authorization": f"Basic {auth_key}"  # именно так, Basic + ключ
+        "RqUID": "test-rq-2026",  # любое уникальное
+        "Authorization": f"Basic {GIGACHAT_TOKEN}"
     }
-
     oauth_data = "scope=GIGACHAT_API_PERS"
 
     try:
@@ -39,7 +52,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         if oauth_response.status_code != 200:
-            await update.message.reply_text(f"Ошибка токена: {oauth_response.status_code} - {oauth_response.text}")
+            await update.message.reply_text(f"Ошибка получения токена: {oauth_response.status_code}\n{oauth_response.text}")
             return
 
         access_token = oauth_response.json()["access_token"]
@@ -50,16 +63,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
-            "RqUID": "test-rq-12345"
+            "RqUID": "test-rq-2026"
         }
 
         payload = {
             "model": "GigaChat:latest",
             "messages": [
-                {"role": "system", "content": "Ты крутой русский автор песен. Пиши матерно, если тема требует, рифмуй жёстко, делай 2 куплета + припев."},
-                {"role": "user", "content": f"Напиши текст песни на тему: {theme}. Сделай куплеты, припев. Потом дай промпт для музыки в @gusli_aibot."}
+                {"role": "system", "content": "Ты крутой русский автор песен. Пиши матерно, если тема требует, рифмуй жёстко, делай 2 куплета + припев + бридж. В конце дай готовый промпт для @gusli_aibot или Suno."},
+                {"role": "user", "content": f"Напиши текст песни на тему: {theme}. Сделай круто!"}
             ],
-            "temperature": 0.9
+            "temperature": 0.9,
+            "max_tokens": 800
         }
 
         response = requests.post(
@@ -72,20 +86,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if response.status_code == 200:
             text = response.json()["choices"][0]["message"]["content"]
-            await update.message.reply_text(f"Вот текст песни:\n\n{text}\n\nКидай промпт в @gusli_aibot или @easysongbot!")
+            await update.message.reply_text(f"Вот текст песни:\n\n{text}\n\nТеперь вставь промпт в @gusli_aibot или @easysongbot и получи трек! 🔥")
         else:
-            await update.message.reply_text(f"Ошибка генерации: {response.status_code} - {response.text}")
+            await update.message.reply_text(f"Ошибка генерации: {response.status_code}\n{response.text}")
 
     except Exception as e:
         await update.message.reply_text(f"Что-то сломалось: {str(e)}")
+
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Эхо: {update.message.text}")
 
 def main():
     app = Application.builder().token(TOKEN).build()
+
+    # Команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("song", song))
+
+    # Эхо на всё остальное
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
