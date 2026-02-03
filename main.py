@@ -9,8 +9,10 @@ from telegram.ext import (
     ContextTypes,
 )
 
+# Логируем всё подробно
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.DEBUG  # DEBUG для максимума инфы
 )
 logger = logging.getLogger(__name__)
 
@@ -24,41 +26,70 @@ if not WEBHOOK_URL:
 
 WEBHOOK_PATH = "/webhook"
 
+# Обработчик /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.debug("Получена команда /start")
     user = update.effective_user
-    await update.message.reply_html(
-        rf"Дарова, {user.mention_html()}! Я Сонграйтер 🔥\n"
-        "Кидай тему песни: 'про кузнечиков в стиле рэп'\n"
-        "Команды: /music — тест музыки, /help — помощь"
+    await update.message.reply_text(
+        f"Дарова, {user.first_name}! Я Студия в кармане 🎤✨\n"
+        "Кидай тему песни — скоро сделаем трек!\n"
+        "Команды: /help, /music, /tariffs, /balance, /photo, /video"
     )
 
-async def music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Тестовая команда /music"""
-    await update.message.reply_text("Команда /music сработала! Скоро тут генерация трека 🎶\n"
-                                    "Пока просто эхо: " + (update.message.text or "пусто"))
-
+# /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Помощь: пиши тему песни, я придумаю текст и промпт для музыки!")
+    logger.debug("Получена команда /help")
+    await update.message.reply_text("Пока бот в тесте. Скоро: генерация песен, текст + музыка!")
 
-async def echo_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Эхо на всё, что не поймали команды (для теста)"""
-    text = update.message.text
-    if text:
-        await update.message.reply_text(f"Эхо: {text}\n(Если это команда — добавь хендлер!)")
+# /music
+async def music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.debug("Получена команда /music")
+    await update.message.reply_text("Генерация музыки пока в разработке 🎶\nПришли тему — подготовлю промпт!")
+
+# /tariffs
+async def tariffs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.debug("Получена команда /tariffs")
+    await update.message.reply_text("Тарифы:\n1 песня бесплатно\n5 песен — 50 руб\nUnlimited — 300 руб/мес (скоро)")
+
+# /balance
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.debug("Получена команда /balance")
+    await update.message.reply_text("Баланс: 0 руб (пока тестовый режим)")
+
+# /photo, /video — заглушки
+async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.debug("Получена команда /photo")
+    await update.message.reply_text("Генерация фото пока не готова 📸")
+
+async def video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.debug("Получена команда /video")
+    await update.message.reply_text("Генерация видео в планах 🎥")
+
+# Ловит ВСЁ остальное (текст, любые команды, фото и т.д.)
+async def catch_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.debug(f"Поймано сообщение: {update.message.text or 'не текст'}")
+    text = update.message.text or "не текст"
+    await update.message.reply_text(f"Эхо: {text}\n(Если это команда — она должна была сработать выше)")
 
 def main() -> None:
     application = Application.builder().token(TOKEN).build()
 
+    # Регистрируем все команды
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("music", music))
-    application.add_handler(CommandHandler("help", help_command)) 
+    application.add_handler(CommandHandler("tariffs", tariffs))
+    application.add_handler(CommandHandler("balance", balance))
+    application.add_handler(CommandHandler("photo", photo))
+    application.add_handler(CommandHandler("video", video))
 
-    application.add_handler(MessageHandler(filters.TEXT | filters.COMMAND, echo_all))
+    # Ловим всё остальное (текст + команды, если не пойманы выше)
+    application.add_handler(MessageHandler(filters.ALL, catch_all))
 
     port = int(os.getenv("PORT", "8080"))
     full_webhook_url = f"{WEBHOOK_URL.rstrip('/')}{WEBHOOK_PATH}"
 
-    logger.info(f"Starting webhook on {full_webhook_url}")
+    logger.info(f"Запуск webhook на {full_webhook_url}")
 
     application.run_webhook(
         listen="0.0.0.0",
@@ -66,6 +97,7 @@ def main() -> None:
         url_path=WEBHOOK_PATH,
         webhook_url=full_webhook_url,
         drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES  # Разрешаем все типы обновлений
     )
 
 if __name__ == "__main__":
