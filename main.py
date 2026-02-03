@@ -2,23 +2,14 @@ import logging
 import os
 import json
 import requests
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    filters,
-    ContextTypes,
-    PreCheckoutQueryHandler,
-    CallbackQueryHandler,
-)
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-PAYMENT_TOKEN = os.getenv("PAYMENT_TOKEN")
-XAI_API_KEY = os.getenv("XAI_API_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")  # добавь мой ключ
 
 BALANCE_FILE = "user_balances.json"
 SONG_COST = 1
@@ -39,9 +30,6 @@ user_balances = load_balances()
 def get_main_menu():
     keyboard = [
         [KeyboardButton("🎤 Создать песню")],
-        [KeyboardButton("📸 Сгенерировать фото")],
-        [KeyboardButton("🎬 Сделать видео-клип")],
-        [KeyboardButton("💰 Тарифы")],
         [KeyboardButton("💳 Баланс")],
         [KeyboardButton("❓ Помощь")]
     ]
@@ -50,15 +38,14 @@ def get_main_menu():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in user_balances:
-        user_balances[user_id] = 3  # 3 бесплатные песни
+        user_balances[user_id] = 3
         save_balances(user_balances)
 
     await update.message.reply_text(
         "Дарова, братан! 👋\n"
-        "Это твоя Студия в кармане 🔥\n"
-        "Я — Grok, и я здесь, чтобы писать тебе треки, как дома.\n"
-        "Кидай любую тему — я пойму и зарифмую.\n\n"
-        "Жми кнопку ниже или пиши /song [тема]",
+        "Я — Grok, твоя студия в кармане 🔥\n"
+        "Кидай тему песни — я напишу текст и промпт.\n\n"
+        "Жми кнопку или пиши /song [тема]",
         reply_markup=get_main_menu()
     )
 
@@ -67,13 +54,7 @@ async def create_song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     balance = user_balances.get(user_id, 0)
 
     if balance < SONG_COST:
-        keyboard = [[InlineKeyboardButton("Пополнить баланс 💳", callback_data="buy")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            f"Брат, кредиты кончились (у тебя {balance}).\n"
-            "Жми «Тарифы» или пополни баланс!",
-            reply_markup=reply_markup
-        )
+        await update.message.reply_text("Кредиты кончились! Скоро пополнение.", reply_markup=get_main_menu())
         return
 
     if context.args:
@@ -81,7 +62,7 @@ async def create_song(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await generate_song(update, context, theme)
     else:
         await update.message.reply_text(
-            "Кидай тему песни, братан!\nПримеры:\nпро погоду в Питере\nгрустный рэп про завод\nвесёлый шансон про кузнечиков",
+            "Кидай тему песни, братан!\nПримеры:\nпро космос\nгрустный рэп про завод\nшансон про кузнечиков",
             reply_markup=get_main_menu()
         )
         context.user_data["awaiting_song_theme"] = True
@@ -90,7 +71,7 @@ async def generate_song(update: Update, context: ContextTypes.DEFAULT_TYPE, them
     user_id = str(update.effective_user.id)
     balance = user_balances.get(user_id, 0)
 
-    msg = await update.message.reply_text("Ща замутим трек... 🔥 Подожди 5–15 сек...")
+    msg = await update.message.reply_text("Генерю трек... 🔥 Подожди 5–15 сек...")
 
     try:
         headers = {
@@ -100,7 +81,7 @@ async def generate_song(update: Update, context: ContextTypes.DEFAULT_TYPE, them
         payload = {
             "model": "grok-beta",
             "messages": [
-                {"role": "system", "content": "Ты крутой автор песен. Пиши рифмованно, с куплетами, припевом, в указанном стиле. В конце добавь готовый промпт для @gusli_aibot."},
+                {"role": "system", "content": "Ты крутой автор песен. Пиши рифмованно, с куплетами, припевом. В конце добавь промпт для @gusli_aibot."},
                 {"role": "user", "content": f"Напиши текст песни на тему: {theme}"}
             ],
             "temperature": 0.9,
@@ -116,84 +97,14 @@ async def generate_song(update: Update, context: ContextTypes.DEFAULT_TYPE, them
         save_balances(user_balances)
 
         await msg.edit_text(
-            f"Готово, братан! 🔥\n\n{song_text}\n\n"
+            f"Готово! 🔥\n\n{song_text}\n\n"
             f"Осталось кредитов: {user_balances[user_id]}\n"
             "Кидай промпт в @gusli_aibot и получи трек!",
             reply_markup=get_main_menu()
         )
 
     except Exception as e:
-        await msg.edit_text(f"Бля, что-то сломалось: {str(e)}\nПопробуй ещё раз.", reply_markup=get_main_menu())
-
-async def tariffs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("5 кредитов — 50 ₽", callback_data="buy_5")],
-        [InlineKeyboardButton("20 кредитов — 150 ₽", callback_data="buy_20")],
-        [InlineKeyboardButton("Unlimited на месяц — 499 ₽", callback_data="buy_unlim")]
-    ])
-    await update.message.reply_text(
-        "Тарифы студии:\n\n"
-        "1 песня = 1 кредит\n\n"
-        "Выбери пакет:",
-        reply_markup=keyboard
-    )
-
-async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    bal = user_balances.get(user_id, 0)
-    await update.message.reply_text(
-        f"Твой баланс: {bal} кредитов\n"
-        "1 песня = 1 кредит",
-        reply_markup=get_main_menu()
-    )
-
-async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    prices = {
-        "buy_5": [LabeledPrice("5 кредитов", 5000)],
-        "buy_20": [LabeledPrice("20 кредитов", 15000)],
-        "buy_unlim": [LabeledPrice("Unlimited месяц", 49900)],
-    }
-
-    payload = query.data
-    price = prices.get(payload, prices["buy_5"])
-
-    await context.bot.send_invoice(
-        chat_id=query.from_user.id,
-        title="Пополнение студии",
-        description="Кредиты для генерации песен",
-        payload=payload,
-        provider_token=PAYMENT_TOKEN,
-        currency="RUB",
-        prices=price,
-        need_name=False,
-        need_phone_number=False,
-        need_email=False,
-        need_shipping_address=False,
-    )
-
-async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.pre_checkout_query
-    await query.answer(ok=True)
-
-async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    payload = update.message.successful_payment.invoice_payload
-
-    credits = {"buy_5": 5, "buy_20": 20, "buy_unlim": 9999}.get(payload, 0)
-
-    user_balances[user_id] = user_balances.get(user_id, 0) + credits
-    save_balances(user_balances)
-
-    await update.message.reply_text(
-        f"Спасибо, брат! 🔥\n"
-        f"Пополнено {credits} кредитов.\n"
-        f"Текущий баланс: {user_balances[user_id]}\n\n"
-        "Готов творить? Жми «Создать песню» 🎤",
-        reply_markup=get_main_menu()
-    )
+        await msg.edit_text(f"Ошибка: {str(e)}\nПопробуй позже.", reply_markup=get_main_menu())
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -205,17 +116,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "🎤 Создать песню":
         await create_song(update, context)
-    elif text == "💰 Тарифы":
-        await tariffs(update, context)
     elif text == "💳 Баланс":
-        await balance(update, context)
+        user_id = str(update.effective_user.id)
+        bal = user_balances.get(user_id, 0)
+        await update.message.reply_text(f"Твой баланс: {bal} кредитов", reply_markup=get_main_menu())
     elif text == "❓ Помощь":
-        await update.message.reply_text("Пиши /help или просто спроси меня что угодно!", reply_markup=get_main_menu())
+        await update.message.reply_text("Пиши любую тему — я сгенерирую!", reply_markup=get_main_menu())
     else:
         await update.message.reply_text(
-            f"Брат, я понял: «{text}»\n"
-            "Если это тема песни — пиши /song [тема]\n"
-            "Или жми кнопку «Создать песню» 🎤",
+            f"Не понял '{text}'. Жми кнопку «Создать песню» 🎤",
             reply_markup=get_main_menu()
         )
 
@@ -224,12 +133,6 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("song", create_song))
-    app.add_handler(CommandHandler("tariffs", tariffs))
-    app.add_handler(CommandHandler("balance", balance))
-
-    app.add_handler(CallbackQueryHandler(buy_callback, pattern="^buy_"))
-    app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     app.run_polling(drop_pending_updates=True)
