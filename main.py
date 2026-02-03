@@ -38,7 +38,7 @@ def get_main_menu():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in user_balances:
-        user_balances[user_id] = 3  # 3 бесплатные песни
+        user_balances[user_id] = 3
         save_balances(user_balances)
 
     await update.message.reply_text(
@@ -82,19 +82,14 @@ async def generate_song(update: Update, context: ContextTypes.DEFAULT_TYPE, them
         payload = {
             "model": "grok-beta",
             "messages": [
-                {"role": "system", "content": "Ты крутой русский автор песен. Пиши матерно, если тема требует, рифмуй жёстко, делай 2 куплета + припев + бридж. В конце дай готовый промпт для музыки в @gusli_aibot или @easysongbot."},
+                {"role": "system", "content": "Ты крутой русский автор песен. Пиши матерно, если тема требует, рифмуй жёстко, делай 2 куплета + припев + бридж. В конце дай готовый промпт для @gusli_aibot или @easysongbot."},
                 {"role": "user", "content": f"Напиши текст песни на тему: {theme}. Сделай круто!"}
             ],
             "temperature": 0.9,
             "max_tokens": 800
         }
 
-        response = requests.post(
-            "https://api.x.ai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
+        response = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload, timeout=30)
         response.raise_for_status()
 
         song_text = response.json()["choices"][0]["message"]["content"]
