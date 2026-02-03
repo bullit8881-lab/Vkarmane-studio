@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PAYMENT_TOKEN = os.getenv("PAYMENT_TOKEN")
-XAI_API_KEY = os.getenv("XAI_API_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")  # добавь мой ключ ниже
 
 BALANCE_FILE = "user_balances.json"
 SONG_COST = 1
@@ -37,12 +37,12 @@ def get_main_menu():
         [KeyboardButton("💳 Баланс")],
         [KeyboardButton("❓ Помощь")]
     ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in user_balances:
-        user_balances[user_id] = 3
+        user_balances[user_id] = 3  # 3 бесплатные песни
         save_balances(user_balances)
 
     await update.message.reply_text(
@@ -117,7 +117,7 @@ async def generate_song(update: Update, context: ContextTypes.DEFAULT_TYPE, them
     except Exception as e:
         await msg.edit_text(f"Бля, что-то сломалось: {str(e)}\nПопробуй ещё раз.", reply_markup=get_main_menu())
 
-# Остальные функции (tariffs, balance, buy_callback, precheckout, successful_payment, handle_text) — как в предыдущем сообщении
+# Функции для тарифов, баланса, оплаты — как в предыдущем коде
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
