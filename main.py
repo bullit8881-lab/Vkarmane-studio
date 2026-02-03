@@ -63,7 +63,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             currency="RUB",
             prices=[{"label": "5 песен", "amount": 5000}]  # 50 руб = 5000 копеек
         )
-    elif query.data = "pay_unlimited":
+    elif query.data == "pay_unlimited":
         await context.bot.send_invoice(
             chat_id=user_id,
             title="Unlimited на месяц",
