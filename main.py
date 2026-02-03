@@ -1,6 +1,9 @@
 import os
-import requests
 import logging
+import asyncio
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import google.generativeai as genai
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -8,91 +11,79 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 # --- ДАННЫЕ ИЗ RAILWAY ---
-BOT_TOKEN = "8462140457:AAFLOvHcBvl2LSrKuO3lHCHWUR3a5yHz-LU"
-# Берем именно тот ключ, который ты добавил в переменные
-DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GEMINI_KEY = os.getenv("GEMINI_KEY")
 
-# --- ФУНКЦИЯ ГЕНЕРАЦИИ ПЕСНИ (DeepSeek) ---
-def generate_song(prompt):
-    if not DEEPSEEK_KEY:
-        return "Ошибка: В Railway не найден DEEPSEEK_API_KEY! Проверь вкладку Variables."
-    
-    url = "https://api.deepseek.com/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    data = {
-        "model": "deepseek-chat",
-        "messages": [
-            {"role": "system", "content": "Ты профессиональный поэт и автор песен. Пиши на русском языке: 2 куплета и припев."},
-            {"role": "user", "content": f"Напиши текст песни на тему: {prompt}"}
-        ],
-        "stream": False
-    }
-    
+# --- НАСТРОЙКА GEMINI ---
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
+
+# --- ХИТРОСТЬ ДЛЯ RAILWAY (Health Check) ---
+# Мы запускаем маленький веб-сервер, чтобы Railway видел, что мы живы.
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Sanechka's Bot is Alive!")
+
+def start_health_check_server():
+    # Railway дает порт через переменную PORT, по умолчанию 8080
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    print(f"🏥 Health Check запущен на порту {port}")
+    server.serve_forever()
+
+# --- ЛОГИКА БОТА ---
+async def generate_song_gemini(prompt):
+    if not GEMINI_KEY:
+        return "Санечка, проверь переменную GEMINI_KEY в Railway!"
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=40)
-        result = response.json()
-        
-        if 'choices' in result:
-            return result['choices'][0]['message']['content']
-        else:
-            error_info = result.get('error', {}).get('message', 'Неизвестная ошибка API')
-            return f"Санечка, DeepSeek призадумался: {error_info}"
-            
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = await model.generate_content_async(
+            f"Напиши текст песни на русском (2 куплета и припев) на тему: {prompt}"
+        )
+        return response.text
     except Exception as e:
-        logging.error(f"Ошибка DeepSeek: {e}")
-        return "Связь со студией DeepSeek прервалась. Попробуй еще раз через минуту!"
+        logging.error(f"Ошибка Gemini: {e}")
+        return "Что-то связь барахлит, попробуй еще разок!"
 
-# --- КНОПКИ МЕНЮ ---
-def get_main_menu():
-    keyboard = [
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = [
         [KeyboardButton("Мой баланс 💳"), KeyboardButton("Мои треки 🎵")],
         [KeyboardButton("Тарифы студии 📊"), KeyboardButton("Помощь ❓")]
     ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-# --- ОБРАБОТЧИКИ ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Санечка, Студия в кармане на базе DeepSeek готова к работе! 🎶✨\n\nТвои кнопки управления внизу. Напиши тему для нового хита!",
-        reply_markup=get_main_menu()
+        "Санечка, я снова тут! 😘 Теперь Railway меня не выключит. Пиши тему для песни!",
+        reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-
-    # Логика кнопок
+    
     if text == "Мой баланс 💳":
-        await update.message.reply_text("💳 Твой текущий баланс: **42 кристалла**.", parse_mode="Markdown")
-    elif text == "Мои треки 🎵":
-        await update.message.reply_text("🎵 Архив пока пуст. Давай напишем что-нибудь классное прямо сейчас?")
-    elif text == "Тарифы студии 📊":
-        tariffs = (
-            "📊 **Тарифы нашей студии:**\n\n"
-            "🔹 10 кристаллов — 500 руб.\n"
-            "🔹 50 кристаллов — 2000 руб.\n"
-            "🔹 Безлимит на день — 1000 руб.\n\n"
-            "Для пополнения: @AlexanderAnatolyevich"
-        )
-        await update.message.reply_text(tariffs, parse_mode="Markdown")
-    elif text == "Помощь ❓":
-        await update.message.reply_text("❓ Все просто: отправь мне любую идею для песни, и я напишу текст в течение минуты.")
+        await update.message.reply_text("💳 Твой баланс: Бесконечен (Gemini спонсирует!)")
+    elif text in ["Мои треки 🎵", "Тарифы студии 📊", "Помощь ❓"]:
+        await update.message.reply_text("Все функции работают! Напиши тему для песни.")
     else:
-        # Генерация песни
-        wait_msg = await update.message.reply_text("🎸 Санечка, DeepSeek подбирает рифмы... Секундочку!")
-        song_result = generate_song(text)
-        await wait_msg.edit_text(song_result)
+        # Индикатор "печатает"
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+        song = await generate_song_gemini(text)
+        await update.message.reply_text(song)
 
 def main():
+    # 1. Запускаем "обманку" для Railway в отдельном потоке
+    threading.Thread(target=start_health_check_server, daemon=True).start()
+
+    # 2. Запускаем основного бота
+    if not BOT_TOKEN:
+        print("❌ ОШИБКА: Нет BOT_TOKEN!")
+        return
+
     application = Application.builder().token(BOT_TOKEN).build()
-    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Студия Санечки на DeepSeek запущена!")
+    print("🚀 Бот запущен и готов к труду!")
     application.run_polling()
 
 if __name__ == "__main__":
