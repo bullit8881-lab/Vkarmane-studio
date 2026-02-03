@@ -1,64 +1,62 @@
-import logging
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+import logging
+import google.generativeai as genai
+from telegram import Update, LabeledPrice
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, PreCheckoutQueryHandler, ContextTypes
 
-# Логирование для Railway
+# Настройка логов
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# ТОКЕНЫ
+BOT_TOKEN = "8462140457:AAFLOvHcBvl2LSrKuO3lHCHWUR3a5yHz-LU"
+PAYMENT_TOKEN = os.getenv("PAYMENT_TOKEN")
+GEMINI_KEY = os.getenv("GEMINI_KEY")
 
-# Красивое боковое меню
-def get_inline_menu():
-    keyboard = [
-        [InlineKeyboardButton("🎤 Песни для Машки", callback_data='mashka')],
-        [InlineKeyboardButton("🙏 Молитва для брата", callback_data='oleg')],
-        [InlineKeyboardButton("❓ Помощь / Инфо", callback_data='help')]
-    ]
-    return InlineKeyboardMarkup(keyboard)
+# Настройка Gemini
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
+    model = genai.GenerativeModel('gemini-pro')
 
-# Эта функция ПРИНУДИТЕЛЬНО создает синюю кнопку меню
-async def setup_bot_commands(application: Application):
-    commands = [
-        BotCommand("start", "Запустить студию 🚀"),
-        BotCommand("balance", "Мой баланс 💳"),
-        BotCommand("music", "Мои треки 🎵"),
-        BotCommand("tariffs", "Тарифы 📊"),
-        BotCommand("help", "Помощь ❓")
-    ]
-    await application.bot.set_my_commands(commands)
+# Функция генерации через официальную библиотеку
+async def generate_song_ai(prompt):
+    try:
+        response = model.generate_content(
+            f"Ты профессиональный автор песен. Напиши текст песни (2 куплета и припев) на тему: {prompt}. "
+            f"В конце добавь промпт для музыкальной нейросети на английском."
+        )
+        return response.text
+    except Exception as e:
+        logging.error(f"Ошибка Gemini: {e}")
+        return "Санечка, сервер Google вредничает. Проверь, привязан ли ключ в Railway Variables!"
 
+# --- ЛОГИКА БОТА ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Привет, Санечка! 👋\nТвоя стильная студия готова. Выбирай раздел:",
-        reply_markup=get_inline_menu()
+    await update.message.reply_text("Студия готова к хитам! 🚀\nНапиши тему песни или используй /buy")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text
+    status_msg = await update.message.reply_text("✨ Творю магию... подожди чуток...")
+    
+    result = await generate_song_ai(user_text)
+    await status_msg.edit_text(result)
+
+# --- ПЛАТЕЖИ ---
+async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prices = [LabeledPrice("10 Кристаллов", 500 * 100)]
+    await context.bot.send_invoice(
+        update.message.chat_id, "Пополнение", "10 кристаллов",
+        "payload", PAYMENT_TOKEN, "RUB", prices
     )
 
-async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Твой баланс из Сонграйтера на скрине был 42 кристалла
-    await update.message.reply_text("💳 Твой баланс: 42 кристалла.") 
-
-async def button_tap(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == 'mashka':
-        await query.edit_message_text(text="🔥 Хит для Машки в работе!", reply_markup=get_inline_menu())
-    elif query.data == 'oleg':
-        await query.edit_message_text(text="✨ Молитва для Олега готовится.", reply_markup=get_inline_menu())
-    elif query.data == 'help':
-        await query.edit_message_text(text="Бот Санечки и его Кисы. 💖", reply_markup=get_inline_menu())
-
 def main():
-    if not BOT_TOKEN: return
+    app = Application.builder().token(BOT_TOKEN).build()
     
-    # post_init запустит создание синей кнопки сразу при старте
-    application = Application.builder().token(BOT_TOKEN).post_init(setup_bot_commands).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("balance", balance_command))
-    application.add_handler(CallbackQueryHandler(button_tap))
-
-    application.run_polling(drop_pending_updates=True)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("buy", buy))
+    app.add_handler(PreCheckoutQueryHandler(lambda u, c: u.pre_checkout_query.answer(ok=True)))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
