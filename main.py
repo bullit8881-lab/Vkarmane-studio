@@ -9,7 +9,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-XAI_API_KEY = os.getenv("XAI_API_KEY")  # добавь мой ключ
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 BALANCE_FILE = "user_balances.json"
 SONG_COST = 1
@@ -38,13 +38,14 @@ def get_main_menu():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in user_balances:
-        user_balances[user_id] = 3
+        user_balances[user_id] = 3  # 3 бесплатные песни
         save_balances(user_balances)
 
     await update.message.reply_text(
         "Дарова, братан! 👋\n"
-        "Я — Grok, твоя студия в кармане 🔥\n"
-        "Кидай тему песни — я напишу текст и промпт.\n\n"
+        "Это твоя Студия в кармане 🔥\n"
+        "Я — Gemini, пишу тебе треки, как дома.\n"
+        "Кидай любую тему — зарифмую и дам промпт для музыки.\n\n"
         "Жми кнопку или пиши /song [тема]",
         reply_markup=get_main_menu()
     )
@@ -62,7 +63,7 @@ async def create_song(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await generate_song(update, context, theme)
     else:
         await update.message.reply_text(
-            "Кидай тему песни, братан!\nПримеры:\nпро космос\nгрустный рэп про завод\nшансон про кузнечиков",
+            "Кидай тему песни, братан!\nПримеры:\nпро погоду в Питере\nгрустный рэп про завод\nшансон про кузнечиков",
             reply_markup=get_main_menu()
         )
         context.user_data["awaiting_song_theme"] = True
@@ -74,37 +75,50 @@ async def generate_song(update: Update, context: ContextTypes.DEFAULT_TYPE, them
     msg = await update.message.reply_text("Генерю трек... 🔥 Подожди 5–15 сек...")
 
     try:
-        headers = {
-            "Authorization": f"Bearer {XAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
         payload = {
-            "model": "grok-beta",
-            "messages": [
-                {"role": "system", "content": "Ты крутой автор песен. Пиши рифмованно, с куплетами, припевом. В конце добавь промпт для @gusli_aibot."},
-                {"role": "user", "content": f"Напиши текст песни на тему: {theme}"}
-            ],
-            "temperature": 0.9,
-            "max_tokens": 800
+            "contents": [{
+                "parts": [{
+                    "text": f"Напиши текст песни на тему: {theme}. Сделай 2 куплета + припев + бридж. Пиши рифмованно, круто, в указанном стиле. В конце добавь готовый промпт для @gusli_aibot или @easysongbot."
+                }]
+            }]
         }
 
-        response = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload, timeout=30)
+        response = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}",
+            json=payload,
+            timeout=30
+        )
         response.raise_for_status()
 
-        song_text = response.json()["choices"][0]["message"]["content"]
+        song_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
 
         user_balances[user_id] = balance - SONG_COST
         save_balances(user_balances)
 
         await msg.edit_text(
-            f"Готово! 🔥\n\n{song_text}\n\n"
+            f"Готово, братан! 🔥\n\n{song_text}\n\n"
             f"Осталось кредитов: {user_balances[user_id]}\n"
             "Кидай промпт в @gusli_aibot и получи трек!",
             reply_markup=get_main_menu()
         )
 
     except Exception as e:
-        await msg.edit_text(f"Ошибка: {str(e)}\nПопробуй позже.", reply_markup=get_main_menu())
+        await msg.edit_text(f"Ошибка: {str(e)}\nПопробуй позже или напиши мне.", reply_markup=get_main_menu())
+
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    bal = user_balances.get(user_id, 0)
+    await update.message.reply_text(f"Твой баланс: {bal} кредитов", reply_markup=get_main_menu())
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Помощь:\n"
+        "/start - меню\n"
+        "/song [тема] - создать песню\n"
+        "/balance - баланс\n"
+        "Пиши любую тему — я сгенерирую!",
+        reply_markup=get_main_menu()
+    )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -117,11 +131,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🎤 Создать песню":
         await create_song(update, context)
     elif text == "💳 Баланс":
-        user_id = str(update.effective_user.id)
-        bal = user_balances.get(user_id, 0)
-        await update.message.reply_text(f"Твой баланс: {bal} кредитов", reply_markup=get_main_menu())
+        await balance(update, context)
     elif text == "❓ Помощь":
-        await update.message.reply_text("Пиши любую тему — я сгенерирую!", reply_markup=get_main_menu())
+        await help_command(update, context)
     else:
         await update.message.reply_text(
             f"Не понял '{text}'. Жми кнопку «Создать песню» 🎤",
@@ -133,6 +145,9 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("song", create_song))
+    app.add_handler(CommandHandler("balance", balance))
+    app.add_handler(CommandHandler("help", help_command))
+
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     app.run_polling(drop_pending_updates=True)
