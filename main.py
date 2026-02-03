@@ -9,7 +9,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")
 
 BALANCE_FILE = "user_balances.json"
 SONG_COST = 1
@@ -44,7 +44,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Дарова, братан! 👋\n"
         "Это твоя Студия в кармане 🔥\n"
-        "Я — Gemini, пишу тебе треки, как дома.\n"
+        "Я — Grok, пишу тебе треки, как дома.\n"
         "Кидай любую тему — зарифмую и дам промпт для музыки.\n\n"
         "Жми кнопку или пиши /song [тема]",
         reply_markup=get_main_menu()
@@ -75,22 +75,29 @@ async def generate_song(update: Update, context: ContextTypes.DEFAULT_TYPE, them
     msg = await update.message.reply_text("Генерю трек... 🔥 Подожди 5–15 сек...")
 
     try:
+        headers = {
+            "Authorization": f"Bearer {XAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
         payload = {
-            "contents": [{
-                "parts": [{
-                    "text": f"Напиши текст песни на тему: {theme}. Сделай 2 куплета + припев + бридж. Пиши рифмованно, круто, в указанном стиле. В конце добавь готовый промпт для @gusli_aibot или @easysongbot."
-                }]
-            }]
+            "model": "grok-beta",
+            "messages": [
+                {"role": "system", "content": "Ты крутой русский автор песен. Пиши матерно, если тема требует, рифмуй жёстко, делай 2 куплета + припев + бридж. В конце дай готовый промпт для музыки в @gusli_aibot или @easysongbot."},
+                {"role": "user", "content": f"Напиши текст песни на тему: {theme}. Сделай круто!"}
+            ],
+            "temperature": 0.9,
+            "max_tokens": 800
         }
 
         response = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}",
+            "https://api.x.ai/v1/chat/completions",
+            headers=headers,
             json=payload,
             timeout=30
         )
         response.raise_for_status()
 
-        song_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        song_text = response.json()["choices"][0]["message"]["content"]
 
         user_balances[user_id] = balance - SONG_COST
         save_balances(user_balances)
