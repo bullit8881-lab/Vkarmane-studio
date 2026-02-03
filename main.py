@@ -1,6 +1,5 @@
 import logging
 import os
-import json
 import requests
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -16,13 +15,13 @@ def get_main_menu():
         [KeyboardButton("🎤 Создать песню")],
         [KeyboardButton("❓ Помощь")]
     ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Дарова, братан! 👋\n"
         "Я — Grok, твоя студия в кармане 🔥\n"
-        "Кидай любую тему — зарифмую и дам промпт для музыки.\n\n"
+        "Кидай тему песни — зарифмую и дам промпт.\n\n"
         "Жми кнопку или пиши /song [тема]",
         reply_markup=get_main_menu()
     )
