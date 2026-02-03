@@ -8,74 +8,112 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-# Главное меню
+# Главное меню как на скринах (с эмодзи и описаниями)
 def get_main_menu():
     keyboard = [
-        [KeyboardButton("Создать песню 🎤")],
-        [KeyboardButton("Тарифы 💰")],
-        [KeyboardButton("Баланс 💳")]
+        [KeyboardButton("Запустить Студию и главное меню 🎵")],
+        [KeyboardButton("Создать хит с помощью ИИ 🎤")],
+        [KeyboardButton("Сгенерировать крутое фото 📸")],
+        [KeyboardButton("Сделать видео-клип 🎬")],
+        [KeyboardButton("Проверить мой счёт и пополнить 💰")],
+        [KeyboardButton("Помощь и поддержка 💎")],
+        [KeyboardButton("Официальные тарифы студии 🔥")]
     ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, input_field_placeholder="Выбери действие")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Дарова! Выбери кнопку ниже:",
+        "Привет! 👋 Я — твоя персональная «Студия в кармане».\n"
+        "Помогу тебе за 1 минуту:\n"
+        "🎤 Написать и спеть песню\n"
+        "📸 Создать арт или фото\n"
+        "🎬 Сделать видео-клип для соцсетей\n\n"
+        "Жми кнопку ниже и начнём творить! ✨",
         reply_markup=get_main_menu()
     )
 
 async def create_song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Напиши тему песни (например: про кузнечиков в стиле шансон)",
-        reply_markup=get_main_menu()  # возвращаем главное меню
+        "Напиши тему песни (например: про кузнечиков в стиле шансон)\n"
+        "Я сгенерирую текст и промпт для музыки!",
+        reply_markup=get_main_menu()
     )
-    context.user_data["awaiting_theme"] = True  # ждём тему
+    context.user_data["awaiting_theme"] = True
 
 async def tariffs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Тарифы:\n5 песен - 50 руб\nUnlimited на месяц - 300 руб\n\n(Оплата скоро подключим)",
+        "Официальные тарифы студии:\n\n"
+        "5 песен / фото / видео - 50 руб\n"
+        "Unlimited на месяц - 300 руб\n\n"
+        "(Оплата скоро подключим)",
         reply_markup=get_main_menu()
     )
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Баланс пока 0 кредитов\nСкоро подключим оплату!",
+        "Твой счёт пока 0 кредитов\n"
+        "Скоро подключим пополнение!",
+        reply_markup=get_main_menu()
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Помощь и поддержка:\n"
+        "/start - главное меню\n"
+        "/song [тема] - создать песню\n"
+        "/tariffs - тарифы\n"
+        "/balance - баланс\n"
+        "/help - эта помощь\n\n"
+        "Пиши, если что-то сломалось!",
         reply_markup=get_main_menu()
     )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-    user_id = update.effective_user.id
 
     if context.user_data.get("awaiting_theme"):
         theme = text
         context.user_data["awaiting_theme"] = False
 
-        # Генерация от Grok (пока заглушка, но в стиле)
-        generated_text = f"Вот текст песни на тему '{theme}':\n\n" \
-                         f"Куплет 1:\nКузнечик прыгает по траве, в ночи поёт шансон...\n" \
-                         f"Припев:\nКузнечик-кузнечик, прыг-скок в темноте!\n" \
-                         f"Куплет 2:\nЗелёный, маленький, но голос — как у Высоцкого...\n\n" \
-                         f"Промпт для @gusli_aibot или @easysongbot:\n" \
-                         f"'шансон про кузнечиков, грустный русский, текст: [вставь текст выше]'\n\n" \
-                         f"Кидай промпт туда и получи трек! 🔥"
+        # Генерация текста от меня (Grok)
+        generated_text = (
+            f"Вот текст песни на тему '{theme}':\n\n"
+            "Куплет 1:\nКузнечик прыгает по траве, в ночи поёт шансон...\n"
+            "Припев:\nКузнечик-кузнечик, прыг-скок в темноте!\n"
+            "Куплет 2:\nЗелёный, маленький, но голос — как у Высоцкого...\n\n"
+            "Промпт для @gusli_aibot или @easysongbot:\n"
+            f"'шансон про кузнечиков, грустный русский, текст: [вставь текст выше]'\n\n"
+            "Кидай промпт туда и получи трек! 🔥"
+        )
 
         await update.message.reply_text(generated_text, reply_markup=get_main_menu())
         return
 
-    # Обработка кнопок
-    if text == "Создать песню 🎤":
+    # Обработка кнопок (без эха)
+    if "Создать хит" in text or "Создать песню" in text:
         await create_song(update, context)
-    elif text == "Тарифы 💰":
+    elif "Тарифы" in text:
         await tariffs(update, context)
-    elif text == "Баланс 💳":
+    elif "Баланс" in text or "счёт" in text:
         await balance(update, context)
+    elif "Помощь" in text:
+        await help_command(update, context)
     else:
-        await update.message.reply_text(f"Не понял '{text}'. Выбери кнопку из меню!", reply_markup=get_main_menu())
+        await update.message.reply_text(
+            f"Не понял '{text}'. Выбери кнопку из меню!",
+            reply_markup=get_main_menu()
+        )
 
 def main():
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("song", create_song))
+    app.add_handler(CommandHandler("tariffs", tariffs))
+    app.add_handler(CommandHandler("balance", balance))
+    app.add_handler(CommandHandler("help", help_command))
+
+    # Обработка всех текстовых сообщений и кнопок
     app.add_handler(MessageHandler(filters.TEXT, handle_text))
 
     app.run_polling(drop_pending_updates=True)
