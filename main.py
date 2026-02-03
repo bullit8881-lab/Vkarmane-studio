@@ -4,58 +4,89 @@ import logging
 from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Настройка логов, чтобы видеть, если что-то пойдет не так
+# Логирование
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# ТВОЙ ТОКЕН ТЕЛЕГРАМ (Оставляем как есть)
+# ТВОИ ДАННЫЕ
 BOT_TOKEN = "8462140457:AAFLOvHcBvl2LSrKuO3lHCHWUR3a5yHz-LU"
+OR_KEY = os.getenv("OPENROUTER_KEY")
 
-# Функция генерации (Llama 3 через бесплатный шлюз)
+# --- ФУНКЦИЯ ИИ (Сонграйтер) ---
 def generate_song(prompt):
-    url = "https://ollama-api.extralabs.tech/v1/chat/completions"
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OR_KEY}",
+        "Content-Type": "application/json"
+    }
     data = {
-        "model": "llama3",
+        "model": "google/gemini-2.0-flash-exp:free",
         "messages": [
             {"role": "system", "content": "Ты профессиональный автор песен. Пиши на русском языке: 2 куплета и припев."},
-            {"role": "user", "content": f"Напиши текст песни на тему: {prompt}"}
+            {"role": "user", "content": f"Напиши песню на тему: {prompt}"}
         ]
     }
     try:
-        response = requests.post(url, json=data, timeout=40)
+        response = requests.post(url, headers=headers, json=data, timeout=30)
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
-        logging.error(f"Ошибка ИИ: {e}")
-        return "Санечка, связь с ИИ немного барахлит. Попробуй еще раз через минуту, я обязательно напишу!"
+        return f"Санечка, ИИ призадумался... Ошибка: {e}"
 
-# Команда /start - она же включает СИНЮЮ КНОПКУ
+# --- ОБРАБОТЧИКИ КОМАНД ---
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Регистрируем команды в меню Telegram
+    # Установка синего меню принудительно
     commands = [
         BotCommand("start", "Запустить студию 🚀"),
-        BotCommand("help", "Как это работает? ❓")
+        BotCommand("balance", "Мой баланс 💳"),
+        BotCommand("music", "Мои треки 🎵"),
+        BotCommand("tariffs", "Тарифы студии 📊"),
+        BotCommand("help", "Помощь и инфо ❓")
     ]
     await context.bot.set_my_commands(commands)
-    await update.message.reply_text("Санечка, Студия запущена! ✨\n\nТеперь у тебя должна появиться синяя кнопка 'Меню'. Просто напиши мне тему песни, и я приступлю к работе!")
+    await update.message.reply_text("Санечка, добро пожаловать в 'Студию в кармане'! ✨\nНапиши мне тему для песни, и я начну творить.")
 
-# Обработка любого входящего текста
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Пока база данных не подключена, выводим твои 42 кристалла
+    await update.message.reply_text("💳 Твой баланс: **42 кристалла**.\nЭтого хватит на 42 шедевра! 🔥")
+
+async def music(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🎵 Твой архив треков пока пуст, но это ненадолго! Напиши свою первую песню прямо сейчас.")
+
+async def tariffs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "📊 **Тарифы нашей студии:**\n\n"
+        "🔹 10 кристаллов — 500 руб.\n"
+        "🔹 50 кристаллов — 2000 руб.\n"
+        "🔹 Безлимит на день — 1000 руб.\n\n"
+        "Для пополнения пиши @AlexanderAnatolyevich"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❓ Все просто: отправь мне любую тему (например: 'Песня про закат в Москве'), и я напишу текст и промпт для музыки!")
+
+# --- ОБРАБОТКА ТЕКСТА ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
-    # Небольшое уведомление, чтобы пользователь не скучал
-    wait_msg = await update.message.reply_text("✍️ Подбираю рифмы, настраиваю инструменты... Секундочку!")
+    wait_msg = await update.message.reply_text("🎸 Санечка, настраиваю гитару... Пишу текст!")
     
-    song_result = generate_song(user_text)
-    await wait_msg.edit_text(song_result)
+    song_text = generate_song(user_text)
+    await wait_msg.edit_text(song_text)
 
 def main():
-    # Создаем приложение
-    application = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
     
-    # Добавляем обработчики
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    # Регистрируем все функции
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("balance", balance))
+    app.add_handler(CommandHandler("music", music))
+    app.add_handler(CommandHandler("tariffs", tariffs))
+    app.add_handler(CommandHandler("help", help_command))
     
-    print("🚀 Бот Санечки запущен и готов к работе!")
-    application.run_polling()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    print("🚀 Студия Санечки запущена!")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
