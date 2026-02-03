@@ -39,7 +39,7 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     try:
-        response = requests.post("https://gigachat.devices.sberbank.ru/api/v1/chat/completions", json=payload, headers=headers, timeout=30)
+        response = requests.post("https://gigachat.devices.sberbank.ru/api/v1/chat/completions", json=payload, headers=headers, timeout=30, verify=False)
         if response.status_code == 200:
             text = response.json()["choices"][0]["message"]["content"]
             await update.message.reply_text(f"Вот текст песни:\n\n{text}\n\nТеперь вставь промпт в @gusli_aibot или @easysongbot и получи трек!")
